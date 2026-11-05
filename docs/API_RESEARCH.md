@@ -57,6 +57,9 @@ Not live-tested: no token was available. Facts below come from https://www.footb
 | AFC Champions League Elite / Two | Victory API (paid) | Implemented best-effort discovery, unverified |
 | Iran national teams | none verified | Not offered |
 
+## Additional free source added (unverified): API-Football
+Implemented as an optional provider (`API_FOOTBALL_KEY`). Free plan = 100 requests/day. Whether the free plan serves the *current* season could not be confirmed from public pages (sources conflict), so the provider checks each wanted competition (Europa League, Conference League, and Iranian leagues) at startup, enables only those found exactly once **with a current season**, treats plan-restriction errors as errors, and caps itself at 90 requests/day with a 3 h refresh interval; the persistent cache covers the rest. No other credible free fixture API was found (TheSportsDB free is unusable; Sportmonks free is trial/2 leagues).
+
 ## Decision
 - **Primary (international): football-data.org.** Documented permanent free tier, single request returns all subscribed competitions for a date range (ideal for caching), standings included.
 - **Fallback: OpenLigaDB.** Keyless and verified; only German competitions.

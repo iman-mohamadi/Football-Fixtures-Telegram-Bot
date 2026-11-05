@@ -9,6 +9,8 @@ export interface FootballProvider {
   readonly competitions: readonly string[];
   /** One-time/periodic setup (e.g. discovering real league IDs). Idempotent. */
   init?(): Promise<void>;
+  /** true once `init()` succeeded (skipped by periodic re-init). */
+  readonly ready?: boolean;
   /** Fixtures with kickoff in [fromDate 00:00Z, toDateExclusive 00:00Z). Dates are YYYY-MM-DD (UTC). */
   getFixturesBetween(fromDate: string, toDateExclusive: string): Promise<Fixture[]>;
   /** All fixtures of the current season of one competition (any status). */

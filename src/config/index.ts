@@ -10,6 +10,8 @@ export interface Config {
   logLevel: 'debug' | 'info' | 'warn' | 'error';
   footballDataToken: string | null;
   victoryApiKey: string | null;
+  apiFootballKey: string | null;
+  cacheFile: string;
   enableOpenLiga: boolean;
   defaultTimezone: string;
   defaultLang: 'fa' | 'en';
@@ -45,6 +47,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, opts: { require
     logLevel: ['debug', 'info', 'warn', 'error'].includes(level) ? level : 'info',
     footballDataToken: env.FOOTBALL_DATA_TOKEN?.trim() || null,
     victoryApiKey: env.VICTORYAPI_KEY?.trim() || null,
+    apiFootballKey: env.API_FOOTBALL_KEY?.trim() || null,
+    cacheFile: env.CACHE_FILE?.trim() || '.cache/football-cache.json',
     enableOpenLiga: (env.ENABLE_OPENLIGADB ?? 'true') !== 'false',
     defaultTimezone: tz,
     defaultLang: lang,

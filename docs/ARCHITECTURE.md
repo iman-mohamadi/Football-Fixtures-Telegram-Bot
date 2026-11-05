@@ -43,7 +43,8 @@ Health: `/healthz` is liveness only (no quota); `/healthz/providers` actively ch
 - `getJson`: timeout, ≤3 attempts, exponential backoff on 5xx/network/invalid JSON, `Retry-After` on 429, no retry on 4xx; sliding-window `RateLimiter` (football-data 9/min, Victory 20/min); `UsageTracker` per provider/day (+ remaining header).
 - `TtlCache`: request de-duplication; on refresh failure serves the previous value flagged `stale` (up to 6h). Views print “data may be outdated (last update HH:mm)” whenever data is stale or older than 15 min.
 - `effectiveStatus`: a “live” match whose kickoff is >10 min in the future or >4 h in the past is `unknown`; a “scheduled” match >3 h past kickoff is `unknown`. Live list uses this, so upcoming/finished matches are never shown as live. OpenLigaDB has no live flag and is never reported live.
-- TTLs: today 5 min (1 min while live), other days 20 min, window 20 min, live list 1 min, competition 20 min, standings 30 min, detail 1 min.
+- Adaptive TTLs (`FixtureService.dayTtl`): 60 s while a match is in play; 5 min if a match started <3.5 h ago or starts in <30 min; 12 h for past days with only settled matches; otherwise 20 min. Window 20 min, live list 1 min, competition 20 min, standings 30 min, detail 1 min.
+- **Persistent L2 cache** (`PersistentStore`): day, window, competition and standings entries are written to PostgreSQL (`fixture_cache`) or a JSON file and read back after restarts, so restarts and extra replicas do not spend API quota; stale persisted data (≤24 h) is served when providers fail. Providers that are already initialised are not re-initialised (`ready`), and API-Football has a hard daily budget (default 90 of 100).
 
 ## UX mechanics
 - First `/start`: language picker only; main menu + persistent reply keyboard (Today / Tomorrow / Live / Main menu) after selection.

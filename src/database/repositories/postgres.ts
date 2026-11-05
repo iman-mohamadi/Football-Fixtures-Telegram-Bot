@@ -22,7 +22,7 @@ function rowToUser(r: any): User {
 }
 
 export class PostgresRepository implements Repository {
-  constructor(private readonly pool: pg.Pool) {}
+  constructor(readonly pool: pg.Pool) {}
 
   static create(url: string): PostgresRepository {
     return new PostgresRepository(new pg.Pool({ connectionString: url, max: 10 }));

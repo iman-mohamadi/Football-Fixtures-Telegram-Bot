@@ -9,7 +9,10 @@ import { MemoryRepository } from './database/repositories/memory.js';
 import { PostgresRepository } from './database/repositories/postgres.js';
 import type { Repository } from './database/repositories/types.js';
 import { FixtureService } from './services/fixtures/fixtureService.js';
+import { FileCacheStore, PostgresCacheStore } from './services/football/cacheStores.js';
+import type { PersistentStore } from './services/football/cache.js';
 import { UsageTracker } from './services/football/http.js';
+import { ApiSportsProvider } from './services/football/providers/apiSports.js';
 import { FootballDataProvider } from './services/football/providers/footballData.js';
 import type { FootballProvider } from './services/football/providers/interface.js';
 import { OpenLigaProvider } from './services/football/providers/openLiga.js';
@@ -21,30 +24,39 @@ import { configureLogger, log } from './utils/logger.js';
 if (existsSync('.env')) process.loadEnvFile('.env');
 
 const cfg = loadConfig();
-configureLogger(cfg.logLevel, [cfg.botToken, cfg.footballDataToken, cfg.victoryApiKey, cfg.webhookSecret]);
+configureLogger(cfg.logLevel, [cfg.botToken, cfg.footballDataToken, cfg.victoryApiKey, cfg.apiFootballKey, cfg.webhookSecret]);
 
 // ── persistence
 let repo: Repository;
+let cacheStore: PersistentStore;
+let pruneCache: (() => Promise<void>) | null = null;
 if (cfg.databaseUrl) {
   await migrate(cfg.databaseUrl);
-  repo = PostgresRepository.create(cfg.databaseUrl);
+  const pgRepo = PostgresRepository.create(cfg.databaseUrl);
+  repo = pgRepo;
+  const pgStore = new PostgresCacheStore(pgRepo.pool);
+  cacheStore = pgStore;
+  pruneCache = () => pgStore.prune(3 * 24 * 3600_000);
 } else {
   log.warn('DATABASE_URL not set: using in-memory storage (favorites/settings are lost on restart). Not for production.');
   repo = new MemoryRepository();
+  cacheStore = new FileCacheStore(cfg.cacheFile); // API responses still survive restarts
 }
 
 // ── providers (priority order = ownership order, see FixtureService docs)
+//   0. API-Football (free 100/day, key optional) – Europa/Conference League etc., verified at startup
 //   1. Victory API  – Iranian + AFC competitions (paid plan; only when VICTORYAPI_KEY is set; league IDs discovered at runtime)
 //   2. football-data.org – international competitions (free token)
 //   3. OpenLigaDB   – German competitions, keyless; fallback for BL1 and sole source of BL2/DFB-Pokal
 const usage = new UsageTracker();
 const providers: FootballProvider[] = [];
 if (cfg.victoryApiKey) providers.push(new VictoryApiProvider(cfg.victoryApiKey, { usage }));
+if (cfg.apiFootballKey) providers.push(new ApiSportsProvider(cfg.apiFootballKey, { usage }));
 if (cfg.footballDataToken) providers.push(new FootballDataProvider(cfg.footballDataToken, { usage }));
 else log.warn('FOOTBALL_DATA_TOKEN not set: international competitions limited to what other providers serve.');
 if (cfg.enableOpenLiga) providers.push(new OpenLigaProvider({ usage }));
 if (!providers.length) throw new Error('No football provider configured. Set FOOTBALL_DATA_TOKEN, VICTORYAPI_KEY and/or ENABLE_OPENLIGADB=true');
-const fixtures = new FixtureService(providers);
+const fixtures = new FixtureService(providers, { store: cacheStore });
 await fixtures.initProviders();
 // Providers that failed discovery (e.g. temporary outage) are retried hourly.
 const initTimer = setInterval(() => void fixtures.initProviders(), 60 * 60_000);
@@ -75,7 +87,10 @@ const tickTimer = setInterval(async () => {
   try {
     const r = await notifier.tick();
     if (r.sent) log.info('notifications sent', r);
-    if (new Date().getUTCMinutes() === 0) await repo.pruneNotificationLog(14 * 24 * 3600_000);
+    if (new Date().getUTCMinutes() === 0) {
+      await repo.pruneNotificationLog(14 * 24 * 3600_000);
+      await pruneCache?.();
+    }
   } catch (e) {
     log.error('notifier tick failed', { err: e as Error });
   } finally {
@@ -141,6 +156,7 @@ async function shutdown(signal: string): Promise<void> {
   try {
     if (cfg.mode === 'polling') await bot.stop();
     await new Promise<void>((r) => server.close(() => r()));
+    if (cacheStore instanceof FileCacheStore) cacheStore.flush();
     await repo.close();
   } catch (e) {
     log.error('shutdown error', { err: e as Error });

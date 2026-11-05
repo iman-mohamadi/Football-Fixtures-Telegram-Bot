@@ -58,7 +58,7 @@ export const TIMEZONES: [string, string][] = [
 const PAGE_ITEMS = 8;
 const PAGE_CHARS = 2800;
 const AWAIT_MS = 5 * 60_000;
-const TEAM_KEY_RE = /^((fd|ol|va):\d+|tc:[a-z0-9-]+)$/;
+const TEAM_KEY_RE = /^((fd|ol|va|as):\d+|tc:[a-z0-9-]+)$/;
 
 function session(deps: Deps, id: number): Session {
   let s = deps.sessions.get(id);

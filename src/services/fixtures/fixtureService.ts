@@ -2,7 +2,7 @@ import { ID_PREFIX, LIVE_STATUSES, type Fixture, type Result, type StandingRow }
 import { addDays, utcDateString } from '../../utils/time.js';
 import { log } from '../../utils/logger.js';
 import { normalizeName } from '../../utils/text.js';
-import { TtlCache } from '../football/cache.js';
+import { TtlCache, type PersistentStore } from '../football/cache.js';
 import type { FootballProvider } from '../football/providers/interface.js';
 import { catalogKey, lookupTeam, teamMatchesQuery } from '../teams/catalog.js';
 import { isLiveNow } from './status.js';
@@ -18,6 +18,8 @@ export interface TtlPolicy {
   window: number;
   fixtureDetail: number;
   standings: number;
+  /** past days whose matches are all finished/cancelled/postponed */
+  settled: number;
 }
 
 export const DEFAULT_TTL: TtlPolicy = {
@@ -29,6 +31,7 @@ export const DEFAULT_TTL: TtlPolicy = {
   window: 20 * MIN,
   fixtureDetail: 60_000,
   standings: 30 * MIN,
+  settled: 12 * 60 * MIN,
 };
 
 export interface TeamRef {
@@ -67,16 +70,20 @@ export class FixtureService {
 
   constructor(
     private readonly providers: FootballProvider[],
-    private readonly opts: { now?: () => number; ttl?: Partial<TtlPolicy> } = {},
+    private readonly opts: { now?: () => number; ttl?: Partial<TtlPolicy>; store?: PersistentStore } = {},
   ) {
     this.ttl = { ...DEFAULT_TTL, ...opts.ttl };
     const now = () => this.now();
-    this.day = new TtlCache(now);
-    this.windowCache = new TtlCache(now);
+    // Persisted layers (survive restarts, saves quota): days, window, competitions, standings.
+    // Not persisted: live list (60 s) and single-match details.
+    const store = opts.store ?? null;
+    const day = 24 * 3600_000;
+    this.day = new TtlCache(now, day, 500, store);
+    this.windowCache = new TtlCache(now, day, 50, store);
     this.liveCache = new TtlCache(now);
-    this.compCache = new TtlCache(now);
+    this.compCache = new TtlCache(now, day, 100, store);
     this.detailCache = new TtlCache(now);
-    this.standingsCache = new TtlCache(now);
+    this.standingsCache = new TtlCache(now, day, 100, store);
   }
 
   private now(): number {
@@ -86,7 +93,7 @@ export class FixtureService {
   /** (Re)initializes providers that need discovery. Safe to call periodically. */
   async initProviders(): Promise<void> {
     for (const p of this.providers) {
-      if (!p.init) continue;
+      if (!p.init || p.ready) continue; // never re-spend quota on providers that are already set up
       try {
         await p.init();
       } catch (e) {
@@ -183,12 +190,30 @@ export class FixtureService {
         const r = await this.fetchRange(date, addDays(date, 1));
         return { list: r.list, partial: r.partial };
       },
-      (v) => {
-        if (date === today && v.list.some((f) => LIVE_STATUSES.includes(f.status) || isLiveNow(f, this.now()))) return this.ttl.live;
-        return date <= today ? this.ttl.today : this.ttl.future;
-      },
+      (v) => this.dayTtl(date, today, v.list),
     );
     return this.wrap(hit, hit.value.list, this.sourcesOf(hit.value.list), hit.value.partial);
+  }
+
+  /**
+   * Adaptive TTL, to spend as few API calls as possible:
+   *  - something in play (or flagged live)           → 60 s
+   *  - a match started within 3.5 h or starts in 30 min → 5 min (status may change)
+   *  - a past day where every match is settled        → 12 h (results are final)
+   *  - otherwise                                       → 20 min
+   */
+  private dayTtl(date: string, today: string, list: Fixture[]): number {
+    const now = this.now();
+    if (list.some((f) => LIVE_STATUSES.includes(f.status) && isLiveNow(f, now))) return this.ttl.live;
+    const settled = (f: Fixture) => f.status === 'finished' || f.status === 'cancelled' || f.status === 'postponed';
+    const active = list.some((f) => {
+      if (settled(f) || !f.kickoffUtc) return false;
+      const k = Date.parse(f.kickoffUtc);
+      return k > now - 3.5 * 3600_000 && k <= now + 30 * 60_000;
+    });
+    if (active) return this.ttl.today;
+    if (date < today && list.every(settled)) return this.ttl.settled;
+    return this.ttl.future;
   }
 
   /** Fixtures within [startMs, endMs) merged from the UTC-day caches, sorted by kickoff. */

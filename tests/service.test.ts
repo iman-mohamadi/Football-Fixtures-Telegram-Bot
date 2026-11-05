@@ -41,10 +41,10 @@ describe('FixtureService', () => {
 
   it('refreshes after TTL expiry', async () => {
     const c = clock();
-    const p = new FakeProvider('footballdata', ['PL'], [fx({ id: 'fd:1' })]);
+    const p = new FakeProvider('footballdata', ['PL'], [fx({ id: 'fd:1', kickoffUtc: '2026-11-07T12:20:00Z' })]); // starts within 30 min → 5 min TTL
     const s = new FixtureService([p], { now: c.now });
     await s.getUtcDay('2026-11-07');
-    c.advance(6 * 60_000); // > today TTL (5 min)
+    c.advance(6 * 60_000); // > 5 min
     await s.getUtcDay('2026-11-07');
     expect(p.calls).toBe(2);
   });
@@ -95,7 +95,7 @@ describe('FixtureService', () => {
     const first = await s.getUtcDay('2026-11-07');
     expect(first.stale).toBe(false);
     p.fail = true;
-    c.advance(10 * 60_000);
+    c.advance(25 * 60_000); // > 20 min idle TTL
     const second = await s.getUtcDay('2026-11-07');
     expect(second.stale).toBe(true);
     expect(second.fetchedAt).toBe(first.fetchedAt);

@@ -1,7 +1,7 @@
-export type ProviderName = 'footballdata' | 'openligadb' | 'victoryapi';
+export type ProviderName = 'footballdata' | 'openligadb' | 'victoryapi' | 'apisports';
 
 /** Prefix of bot-wide fixture/team ids per provider, e.g. fd:123 */
-export const ID_PREFIX: Record<ProviderName, string> = { footballdata: 'fd', openligadb: 'ol', victoryapi: 'va' };
+export const ID_PREFIX: Record<ProviderName, string> = { footballdata: 'fd', openligadb: 'ol', victoryapi: 'va', apisports: 'as' };
 
 export type FixtureStatus =
   | 'scheduled'

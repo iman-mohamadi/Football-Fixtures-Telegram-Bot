@@ -23,6 +23,7 @@ export const COMPETITION_CATALOG: CompetitionMeta[] = [
   { code: 'FL1', nameEn: 'Ligue 1', nameFa: 'لیگ ۱ فرانسه', category: 'france' },
   { code: 'CL', nameEn: 'UEFA Champions League', nameFa: 'لیگ قهرمانان اروپا', category: 'europe', aliases: ['ucl'] },
   { code: 'EL', nameEn: 'UEFA Europa League', nameFa: 'لیگ اروپا', category: 'europe', aliases: ['uel'] },
+  { code: 'UECL', nameEn: 'UEFA Conference League', nameFa: 'لیگ کنفرانس اروپا', category: 'europe', aliases: ['uecl', 'conference league'] },
   { code: 'EC', nameEn: 'European Championship', nameFa: 'یورو', category: 'international', aliases: ['euro'] },
   { code: 'WC', nameEn: 'FIFA World Cup', nameFa: 'جام جهانی', category: 'international' },
   { code: 'DED', nameEn: 'Eredivisie', nameFa: 'اردیویزی هلند', category: 'other', aliases: ['netherlands'] },

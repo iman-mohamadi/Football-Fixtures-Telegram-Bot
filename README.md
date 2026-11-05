@@ -42,6 +42,8 @@ Docker: `docker compose up -d --build` (set `POSTGRES_PASSWORD` and the variable
 | `FOOTBALL_DATA_TOKEN` | recommended | free football-data.org token – international leagues |
 | `ENABLE_OPENLIGADB` | no | keyless German data (default `true`) |
 | `VICTORYAPI_KEY` | optional (paid) | Iranian + AFC competitions |
+| `API_FOOTBALL_KEY` | optional (free, 100/day) | adds Europa/Conference League and any other wanted competition the plan really serves (verified at startup; see log `apisports competitions verified`) |
+| `CACHE_FILE` | no | where API responses are persisted without a database (default `.cache/football-cache.json`) |
 | `DEFAULT_TIMEZONE`, `DEFAULT_LANG`, `LOG_LEVEL` | no | fallbacks / logging |
 
 Secrets are only read from the environment; logs scrub the configured tokens.
@@ -51,6 +53,9 @@ Secrets are only read from the environment; logs scrub the configured tokens.
 npm test          # 154 deterministic tests, all HTTP mocked
 npm run typecheck
 ```
+
+## Saving API quota
+Every API response is stored (PostgreSQL table `fixture_cache`, or `CACHE_FILE` in development) and re-used after restarts. Cache lifetimes adapt: 60 s while a match is live, 5 min around kickoff, 20 min on idle days, 12 h for past days whose matches are all settled. If an API is down or out of quota, the last stored data is shown with an “outdated” warning. Measured with the real football-data.org API: first start = 1 call, restart = 0 calls.
 
 ## Limitations
 - football-data.org and Victory API adapters are tested with **mocked responses only** (no token/key was available during development). Verify with your own keys before launch.

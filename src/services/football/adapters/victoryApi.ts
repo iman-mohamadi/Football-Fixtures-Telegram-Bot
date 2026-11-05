@@ -23,7 +23,14 @@ export function mapVictoryStatus(short: unknown): FixtureStatus {
   return typeof short === 'string' ? (STATUS[short] ?? 'unknown') : 'unknown';
 }
 
-export function mapVictoryFixture(raw: any, codeForLeague: (leagueId: number) => string | null): Fixture | null {
+/** Both Victory API and API-Sports (API-Football) use this layout; `src` selects the id prefix/provider name. */
+export interface ApiSource {
+  provider: 'victoryapi' | 'apisports';
+  prefix: 'va' | 'as';
+}
+export const VICTORY_SRC: ApiSource = { provider: 'victoryapi', prefix: 'va' };
+
+export function mapVictoryFixture(raw: any, codeForLeague: (leagueId: number) => string | null, src: ApiSource = VICTORY_SRC): Fixture | null {
   const id = raw?.fixture?.id;
   const leagueId = num(raw?.league?.id);
   const home = str(raw?.teams?.home?.name);
@@ -47,17 +54,17 @@ export function mapVictoryFixture(raw: any, codeForLeague: (leagueId: number) =>
   const status = mapVictoryStatus(raw.fixture.status?.short);
 
   return {
-    id: `va:${id}`,
-    provider: 'victoryapi',
+    id: `${src.prefix}:${id}`,
+    provider: src.provider,
     providerMatchId: String(id),
     competitionCode: code,
-    competitionId: `va:${leagueId}`,
+    competitionId: `${src.prefix}:${leagueId}`,
     competitionName: str(raw.league?.name) ?? code,
     competitionLogo: str(raw.league?.logo),
     homeTeam: home,
     awayTeam: away,
-    homeTeamKey: raw.teams.home.id != null ? `va:${raw.teams.home.id}` : null,
-    awayTeamKey: raw.teams.away.id != null ? `va:${raw.teams.away.id}` : null,
+    homeTeamKey: raw.teams.home.id != null ? `${src.prefix}:${raw.teams.home.id}` : null,
+    awayTeamKey: raw.teams.away.id != null ? `${src.prefix}:${raw.teams.away.id}` : null,
     homeLogo: str(raw.teams.home.logo),
     awayLogo: str(raw.teams.away.logo),
     kickoffUtc,
@@ -71,11 +78,11 @@ export function mapVictoryFixture(raw: any, codeForLeague: (leagueId: number) =>
   };
 }
 
-export function mapVictoryFixtures(raw: any, codeForLeague: (leagueId: number) => string | null): Fixture[] {
+export function mapVictoryFixtures(raw: any, codeForLeague: (leagueId: number) => string | null, src: ApiSource = VICTORY_SRC): Fixture[] {
   const list = Array.isArray(raw?.response) ? raw.response : [];
   const out: Fixture[] = [];
   for (const r of list) {
-    const f = mapVictoryFixture(r, codeForLeague);
+    const f = mapVictoryFixture(r, codeForLeague, src);
     if (f) out.push(f);
   }
   return out;
@@ -89,7 +96,7 @@ export function victoryErrors(raw: any): string | null {
   return null;
 }
 
-export function mapVictoryStandings(raw: any): StandingRow[] {
+export function mapVictoryStandings(raw: any, prefix: 'va' | 'as' = 'va'): StandingRow[] {
   const table: any[] = raw?.response?.[0]?.league?.standings?.[0] ?? [];
   const out: StandingRow[] = [];
   for (const r of Array.isArray(table) ? table : []) {
@@ -99,7 +106,7 @@ export function mapVictoryStandings(raw: any): StandingRow[] {
     out.push({
       rank,
       team: name,
-      teamKey: r.team?.id != null ? `va:${r.team.id}` : null,
+      teamKey: r.team?.id != null ? `${prefix}:${r.team.id}` : null,
       logo: str(r.team?.logo),
       played: num(r.all?.played),
       won: num(r.all?.win),
